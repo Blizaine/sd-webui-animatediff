@@ -13,7 +13,7 @@ from scripts.animatediff_mm import mm_animatediff as motion_module
 from scripts.animatediff_prompt import AnimateDiffPromptSchedule
 from scripts.animatediff_output import AnimateDiffOutput
 from scripts.animatediff_ui import AnimateDiffProcess, AnimateDiffUiGroup
-from scripts.animatediff_infotext import update_infotext
+from scripts.animatediff_infotext import update_infotext, infotext_pasted
 
 script_dir = scripts.basedir()
 motion_module.set_script_dir(script_dir)
@@ -27,6 +27,8 @@ class AnimateDiffScript(scripts.Script):
         self.cn_hacker = None
         self.prompt_scheduler = None
         self.hacked = False
+        self.infotext_fields: List[Tuple[gr.components.IOComponent, str]] = []
+        self.paste_field_names: List[str] = []
 
 
     def title(self):
@@ -38,8 +40,13 @@ class AnimateDiffScript(scripts.Script):
 
 
     def ui(self, is_img2img):
-        return (AnimateDiffUiGroup().render(is_img2img, motion_module.get_model_dir()),)
-
+        unit = AnimateDiffUiGroup().render(
+            is_img2img,
+            motion_module.get_model_dir(),
+            self.infotext_fields,
+            self.paste_field_names
+        )
+        return (unit,)
 
     def before_process(self, p: StableDiffusionProcessing, params: AnimateDiffProcess):
         if p.is_api and isinstance(params, dict):
@@ -128,6 +135,45 @@ def on_ui_settings():
         )
     )
     shared.opts.add_option(
+        key="animatediff_mp4_crf",
+        info=shared.OptionInfo(
+            default=23,
+            label="MP4 Quality (CRF)",
+            component=gr.Slider,
+            component_args={
+                "minimum": 0,
+                "maximum": 51,
+                "step": 1},
+            section=section
+        )
+        .link("docs", "https://trac.ffmpeg.org/wiki/Encode/H.264#crf")
+        .info("17 for best quality, up to 28 for smaller size")
+    )
+    shared.opts.add_option(
+        key="animatediff_mp4_preset",
+        info=shared.OptionInfo(
+            default="",
+            label="MP4 Encoding Preset",
+            component=gr.Dropdown,
+            component_args={"choices": ["", 'veryslow', 'slower', 'slow', 'medium', 'fast', 'faster', 'veryfast', 'superfast', 'ultrafast']},
+            section=section,
+        )
+        .link("docs", "https://trac.ffmpeg.org/wiki/Encode/H.264#Preset")
+        .info("encoding speed, use the slowest you can tolerate")
+    )
+    shared.opts.add_option(
+        key="animatediff_mp4_tune",
+        info=shared.OptionInfo(
+            default="",
+            label="MP4 Tune encoding for content type",
+            component=gr.Dropdown,
+            component_args={"choices": ["", "film", "animation", "grain"]},
+            section=section
+        )
+        .link("docs", "https://trac.ffmpeg.org/wiki/Encode/H.264#Tune")
+        .info("optimize for specific content types")
+    )
+    shared.opts.add_option(
         "animatediff_webp_quality",
         shared.OptionInfo(
             80,
@@ -168,6 +214,15 @@ def on_ui_settings():
             {"choices": ["Optimize attention layers with xformers",
                          "Optimize attention layers with sdp (torch >= 2.0.0 required)",
                          "Do not optimize attention layers"]},
+            section=section
+        )
+    )
+    shared.opts.add_option(
+        "animatediff_disable_lcm",
+        shared.OptionInfo(
+            False,
+            "Disable LCM",
+            gr.Checkbox,
             section=section
         )
     )
@@ -229,3 +284,4 @@ def on_ui_settings():
 script_callbacks.on_ui_settings(on_ui_settings)
 script_callbacks.on_after_component(AnimateDiffUiGroup.on_after_component)
 script_callbacks.on_before_ui(AnimateDiffUiGroup.on_before_ui)
+script_callbacks.on_infotext_pasted(infotext_pasted)
